@@ -6,6 +6,7 @@ import getpass
 import logging
 import itertools
 import sys
+import types
 
 try:
     import argparse
@@ -15,7 +16,7 @@ except ImportError:
 from imaplib2 import IMAP4_SSL
 
 GMAIL_HOST = 'imap.gmail.com'
-IDLE_TIMEOUT = 3#00
+IDLE_TIMEOUT = 300
 LABELED_FLAG = 'Autolabeled'
 CHUNK_SIZE = 100
 
@@ -29,33 +30,35 @@ def iter_chunks(iterable, size):
             break
 
 class Autolabeler(object):
-    def __init__(self, account, password, domain=None, mailbox=None, ignore=[],
+    def __init__(self, account, password, domain=[], mailbox=None, ignore=[],
                  label_prefix=None, label_case='lower', flag=LABELED_FLAG,
-                 dry_run=False, move=False):
+                 idle_timeout=IDLE_TIMEOUT, dry_run=False, move=False):
         
         self.account = account
         self.password = password
-        self.domain = domain and domain.lower()
         self.mailbox = mailbox or 'INBOX'
         self.label_case = getattr(str, label_case, None)
         self.flag = '$%s' % flag
         self.dry_run = dry_run
         self.move = move
+        self.label_prefix = label_prefix
         
-        self.ignore = [self.account]
-        self.ignore.extend(i.lower() for i in ignore if i)
+        if isinstance(domain, types.StringTypes):
+            domain = [domain]
+        self.domain = domain
+        
+        self.ignore = []
+        if ignore:
+            self.ignore.extend(i.lower() for i in ignore if i)
+        elif self.domain:
+            self.ignore.append(account.split('@')[0].lower())
         
         self.criterion = ['NOT', 'KEYWORD', self.flag]
         if self.domain:
-            self.criterion.extend(['TO', self.domain])
+            for domain in self.domain[1:]:
+                self.criterion.extend(['OR', 'TO', domain])
+            self.criterion.extend(['TO', self.domain[0]])
 
-        self.label_prefix = label_prefix
-        if self.label_prefix is None:
-            if self.domain:
-                self.label_prefix = '%s/' % self.domain
-            else:
-                self.label_prefix = ''
-            
     def run(self):
         try:
             self.connect()
@@ -110,12 +113,15 @@ class Autolabeler(object):
             def label_from_addr(addr):
                 local, domain = addr.split('@')
                 if self.domain:
-                    if domain.lower() == self.domain:
-                        return local
+                    domain = domain.lower()
+                    for test_domain in self.domain:
+                        if domain == test_domain.lower():
+                            return local, test_domain
                 elif '+' in local:
-                    return local.split('+', 1)[1]
+                    return local.split('+', 1)[1], None
+                return None, None
                 
-            for label in map(label_from_addr, addrs):
+            for label, domain in map(label_from_addr, addrs):
                 # Check ignore list
                 if not label or label.lower() in self.ignore:
                     continue
@@ -123,9 +129,14 @@ class Autolabeler(object):
                 # Transform label
                 if self.label_case:
                     label = self.label_case(label)
-
-                label = self.label_prefix + label
                     
+                # Apply label prefix
+                if self.label_prefix:
+                    if domain and '%' in self.label_prefix:
+                        label = self.label_prefix.replace('%', domain, 1) + label
+                    else:
+                        label = self.label_prefix + label
+
                 labels[label].add(msg_num)
 
         # Dry run - just display labels
@@ -222,8 +233,8 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--ignore', type=lambda i: i.split(','),
                         metavar='IGNORE[,IGNORE...]',
                         help='Comma-separated list of labels to ignore')
-    parser.add_argument('-e', '--label-prefix',
-                        help='Prefix to add to all labels')
+    parser.add_argument('-f', '--label-prefix',
+                        help='Prefix to add to all labels (use "%" for domain)')
     parser.add_argument('-c', '--label-case', default='lower',
                         choices='lower upper capitalize none'.split(),
                         help='Transform label case (Default: %(default)s)')
@@ -243,7 +254,4 @@ if __name__ == '__main__':
     kwargs = dict(
         (k, v) for k, v in args.__dict__.items() if k[0] != '_')
 
-    print kwargs
-    
-    
-    #Autolabeler(**kwargs).run()
+    Autolabeler(**kwargs).run()
