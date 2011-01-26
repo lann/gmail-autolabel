@@ -1,0 +1,31 @@
+Automatically label messages in Google Mail based on +tags or catch-all domain addresses
+
+Usage:
+
+main.py [-h] [-v] [-y] [-p PASSWORD] [-m MAILBOX] [-M]
+               [-t | -d DOMAIN[,DOMAIN...]] [-i IGNORE[,IGNORE...]]
+               [-e LABEL_PREFIX] [-c {lower,upper,capitalize,none}]
+               account
+
+positional arguments:
+  account               Google mail account
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -v, --verbose
+  -y, --dry-run         Just print labels that would be applied
+  -p PASSWORD, --password PASSWORD
+                        Account password (will prompt otherwise)
+  -m MAILBOX, --mailbox MAILBOX
+                        Mailbox to label (defaults to Inbox)
+  -M, --move            Move labeled messages out of mailbox
+  -t, --tags            Label for address tags (plus-style) [default]
+  -d DOMAIN[,DOMAIN...], --domain DOMAIN[,DOMAIN...]
+                        Label for "catch-all" domain addresses
+  -i IGNORE[,IGNORE...], --ignore IGNORE[,IGNORE...]
+                        Comma-separated list of labels to ignore
+  -e LABEL_PREFIX, --label-prefix LABEL_PREFIX
+                        Prefix to add to all labels
+  -c {lower,upper,capitalize,none}, --label-case {lower,upper,capitalize,none}
+                        Transform label case (Default: lower)
+
